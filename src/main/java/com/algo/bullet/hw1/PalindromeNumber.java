@@ -1,4 +1,4 @@
-package com.algo.bullet;
+package com.algo.bullet.hw1;
 
 public class PalindromeNumber {
     public static boolean isPalindrome(int x) {
