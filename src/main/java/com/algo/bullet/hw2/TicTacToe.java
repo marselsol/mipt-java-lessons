@@ -2,6 +2,9 @@ package com.algo.bullet.hw2;
 
 import java.util.*;
 
+/**
+ * Главный класс — точка входа в программу.
+ */
 public class TicTacToe {
     public static void main(String[] args) {
         Scanner sc = new Scanner(System.in);
@@ -13,18 +16,29 @@ public class TicTacToe {
         System.out.print("Играть против компьютера? (y/n): ");
         boolean vsAi = readYesNo(sc);
 
-        Player p1 = new HumanPlayer(name1, 'X');
+        // Используем фабрику для создания игроков
+        PlayerFactory factory = new PlayerFactory();
+        Player p1 = factory.createPlayer("human", name1, 'X');
+
         Player p2;
         if (vsAi) {
-            p2 = new AIPlayer("Компьютер", 'O');
+            p2 = factory.createPlayer("ai", "Компьютер", 'O');
         } else {
             System.out.print("Имя игрока 2 (O): ");
             String name2 = readNonEmpty(sc);
-            p2 = new HumanPlayer(name2, 'O');
+            p2 = factory.createPlayer("human", name2, 'O');
         }
 
-        Game game = new Game(new Board(), p1, p2);
+        // Используем Builder для создания доски
+        Board board = new Board.Builder()
+                .withSize(3)
+                .withEmptySymbol(' ')
+                .build();
+
+        // Singleton + Dependency Injection
+        Game game = Game.getInstance(board, p1, p2);
         game.startGame(sc);
+
         sc.close();
     }
 
@@ -47,59 +61,101 @@ public class TicTacToe {
 }
 
 /**
- * Модель игрового поля 3x3 (композиция в Game).
+ * Шаблон Builder для гибкого создания поля.
  */
 class Board {
-    private final char[][] grid = new char[3][3];
+    private final char[][] grid;
+    private final int size;
+    private final char emptySymbol;
 
-    public Board() {
-        for (int r = 0; r < 3; r++) Arrays.fill(grid[r], ' ');
+    private Board(Builder builder) {
+        this.size = builder.size;
+        this.emptySymbol = builder.emptySymbol;
+        this.grid = new char[size][size];
+        for (int r = 0; r < size; r++) Arrays.fill(grid[r], emptySymbol);
     }
 
     public void displayBoard() {
         System.out.println();
-        System.out.println("   1   2   3 ");
-        for (int r = 0; r < 3; r++) {
-            System.out.printf("%d  %c | %c | %c %n", r + 1, grid[r][0], grid[r][1], grid[r][2]);
-            if (r < 2) System.out.println("  ---+---+---");
+        System.out.print("   ");
+        for (int i = 1; i <= size; i++) System.out.print(i + "   ");
+        System.out.println();
+        for (int r = 0; r < size; r++) {
+            System.out.printf("%d ", r + 1);
+            for (int c = 0; c < size; c++) {
+                System.out.print(" " + grid[r][c]);
+                if (c < size - 1) System.out.print(" |");
+            }
+            System.out.println();
+            if (r < size - 1) {
+                System.out.print("  ");
+                for (int c = 0; c < size; c++) {
+                    System.out.print("---");
+                    if (c < size - 1) System.out.print("+");
+                }
+                System.out.println();
+            }
         }
         System.out.println();
     }
 
-    /**
-     * Пытается поставить метку; возвращает true, если клетка была свободна и ход сделан.
-     */
     public boolean placeMark(int row, int col, char mark) {
-        if (row < 0 || row >= 3 || col < 0 || col >= 3) return false;
-        if (grid[row][col] != ' ') return false;
+        if (row < 0 || row >= size || col < 0 || col >= size) return false;
+        if (grid[row][col] != emptySymbol) return false;
         grid[row][col] = mark;
         return true;
     }
 
     public boolean isFull() {
-        for (char[] row : grid) for (char c : row) if (c == ' ') return false;
+        for (char[] row : grid)
+            for (char c : row)
+                if (c == emptySymbol) return false;
         return true;
     }
 
     public boolean checkWin(char m) {
-        for (int i = 0; i < 3; i++) {
-            if (grid[i][0] == m && grid[i][1] == m && grid[i][2] == m) return true;
-            if (grid[0][i] == m && grid[1][i] == m && grid[2][i] == m) return true;
+        // Проверка строк и столбцов
+        for (int i = 0; i < size; i++) {
+            if (checkLine(m, i, 0, 0, 1) || checkLine(m, 0, i, 1, 0)) return true;
         }
-        // диагонали
-        return (grid[0][0] == m && grid[1][1] == m && grid[2][2] == m) ||
-                (grid[0][2] == m && grid[1][1] == m && grid[2][0] == m);
+        // Диагонали
+        return checkLine(m, 0, 0, 1, 1) || checkLine(m, 0, size - 1, 1, -1);
     }
 
-    /**
-     * Список свободных клеток для ИИ.
-     */
+    private boolean checkLine(char mark, int startRow, int startCol, int dRow, int dCol) {
+        for (int i = 0; i < size; i++) {
+            if (grid[startRow + i * dRow][startCol + i * dCol] != mark)
+                return false;
+        }
+        return true;
+    }
+
     public List<int[]> emptyCells() {
         List<int[]> list = new ArrayList<>();
-        for (int r = 0; r < 3; r++)
-            for (int c = 0; c < 3; c++)
-                if (grid[r][c] == ' ') list.add(new int[]{r, c});
+        for (int r = 0; r < size; r++)
+            for (int c = 0; c < size; c++)
+                if (grid[r][c] == emptySymbol) list.add(new int[]{r, c});
         return list;
+    }
+
+    /** Builder для Board */
+    public static class Builder {
+        private int size = 3;
+        private char emptySymbol = ' ';
+
+        public Builder withSize(int size) {
+            this.size = size;
+            return this;
+        }
+
+        public Builder withEmptySymbol(char emptySymbol) {
+            this.emptySymbol = emptySymbol;
+            return this;
+        }
+
+        public Board build() {
+            return new Board(this);
+        }
     }
 }
 
@@ -123,14 +179,11 @@ abstract class Player {
         return mark;
     }
 
-    /**
-     * Сделать ход. Возвращает true, если ход выполнен.
-     */
     public abstract boolean makeMove(Board board, Scanner sc);
 }
 
 /**
- * Игрок-человек: вводит координаты.
+ * Игрок-человек.
  */
 class HumanPlayer extends Player {
     public HumanPlayer(String name, char mark) {
@@ -160,7 +213,7 @@ class HumanPlayer extends Player {
 }
 
 /**
- * Простой ИИ: случайный допустимый ход.
+ * Игрок-ИИ.
  */
 class AIPlayer extends Player {
     private final Random rnd = new Random();
@@ -181,19 +234,43 @@ class AIPlayer extends Player {
 }
 
 /**
- * Оркестратор игры: содержит Board и двух Players (композиция).
+ * Фабрика для создания игроков (Factory Pattern).
+ */
+class PlayerFactory {
+    public Player createPlayer(String type, String name, char mark) {
+        return switch (type.toLowerCase(Locale.ROOT)) {
+            case "ai", "computer" -> new AIPlayer(name, mark);
+            case "human", "player" -> new HumanPlayer(name, mark);
+            default -> throw new IllegalArgumentException("Неизвестный тип игрока: " + type);
+        };
+    }
+}
+
+/**
+ * Класс Game реализует Singleton и использует Dependency Injection.
  */
 class Game {
+    private static Game instance;
+
     private final Board board;
     private final Player player1;
     private final Player player2;
     private Player currentPlayer;
 
-    public Game(Board board, Player player1, Player player2) {
+    // Приватный конструктор (Singleton)
+    private Game(Board board, Player player1, Player player2) {
         this.board = board;
         this.player1 = player1;
         this.player2 = player2;
         this.currentPlayer = player1;
+    }
+
+    // Статический метод получения единственного экземпляра
+    public static Game getInstance(Board board, Player p1, Player p2) {
+        if (instance == null) {
+            instance = new Game(board, p1, p2);
+        }
+        return instance;
     }
 
     public void startGame(Scanner sc) {
@@ -213,9 +290,6 @@ class Game {
         currentPlayer = (currentPlayer == player1) ? player2 : player1;
     }
 
-    /**
-     * Возвращает true, если игра закончена (победа или ничья).
-     */
     private boolean checkForWinOrDraw() {
         if (board.checkWin(currentPlayer.getMark())) {
             board.displayBoard();
